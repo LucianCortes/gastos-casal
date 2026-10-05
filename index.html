@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<!-- interactive-widget=resizes-content: quando o teclado do Android abre, a tela encolhe
+     junto, e o botão "Salvar" (que fica grudado no rodapé do formulário) continua visível -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>Gastos do Casal</title>
+<meta name="description" content="Controle de gastos do casal — Lucian e Luciana">
+<meta name="theme-color" content="#fcfdfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a201b" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* ===== Cores (claro e escuro) — copiadas do protótipo aprovado ===== */
+  :root{
+    color-scheme:light;
+    --ground:#eef1ed; --surface:#fcfdfb; --surface-2:#f4f6f2;
+    --ink:#161d19; --ink-2:#4b5a52; --ink-3:#74857b;
+    --line:#dde3dc; --line-2:#c9d2c8; --trilha:#e6eae4;
+    --accent:#12836A; --accent-soft:rgba(18,131,106,.10);
+    --esposa:#8A4FC4; --esposa-soft:rgba(138,79,196,.10);
+    --terceiro:#9A5516; --terceiro-soft:rgba(154,85,22,.12);
+    --alerta:#AE3227; --alerta-soft:rgba(174,50,39,.10);
+    --botao-ink:#ffffff;
+    --shadow:0 1px 2px rgba(22,29,25,.05), 0 8px 24px -12px rgba(22,29,25,.18);
+    --r:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme:dark;
+      --ground:#10140f; --surface:#1a201b; --surface-2:#222a23;
+      --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#7d8c80;
+      --line:#2c352d; --line-2:#3b463c; --trilha:#2c352d;
+      --accent:#2E9E80; --accent-soft:rgba(46,158,128,.16);
+      --esposa:#A97BE0; --esposa-soft:rgba(169,123,224,.16);
+      --terceiro:#D99248; --terceiro-soft:rgba(217,146,72,.16);
+      --alerta:#E2695C; --alerta-soft:rgba(226,105,92,.16);
+      --botao-ink:#0b120e;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --ground:#10140f; --surface:#1a201b; --surface-2:#222a23;
+    --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#7d8c80;
+    --line:#2c352d; --line-2:#3b463c; --trilha:#2c352d;
+    --accent:#2E9E80; --accent-soft:rgba(46,158,128,.16);
+    --esposa:#A97BE0; --esposa-soft:rgba(169,123,224,.16);
+    --terceiro:#D99248; --terceiro-soft:rgba(217,146,72,.16);
+    --alerta:#E2695C; --alerta-soft:rgba(226,105,92,.16);
+    --botao-ink:#0b120e;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  /* ===== Base ===== */
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased;
+    -webkit-tap-highlight-color:transparent;
+  }
+  [hidden]{display:none!important}
+  .num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums}
+
+  /* ===== Moldura: no celular ocupa a tela toda; no computador vira um "telefone" ===== */
+  .palco{height:100%; display:flex; flex-direction:column; align-items:center}
+  .fone{
+    width:100%; max-width:420px; height:100vh; height:100dvh; display:flex; flex-direction:column;
+    background:var(--surface-2); position:relative; overflow:hidden;
+    padding-top:env(safe-area-inset-top,0px);
+  }
+  @media (min-width:900px){
+    .palco{padding-block:24px}
+    .fone{max-height:880px; height:calc(100vh - 48px); border-radius:28px; border:1px solid var(--line-2); box-shadow:var(--shadow)}
+  }
+
+  /* ===== Topo ===== */
+  .topo{
+    padding:12px 16px 10px; background:var(--surface); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex:none;
+  }
+  .topo .esq{min-width:0}
+  .topo h1{margin:0; font-size:16px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .topo .mes{font-size:12px; color:var(--ink-3); margin-top:1px; overflow-wrap:anywhere; line-height:1.3}
+  .topo .dir{display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex:none}
+  .quem{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
+    background:var(--accent-soft); color:var(--accent); padding:5px 10px; border-radius:999px;
+  }
+  .quem.ela{background:var(--esposa-soft); color:var(--esposa)}
+  .quem .ponto{width:7px; height:7px; border-radius:50%; background:currentColor}
+  .sinc{font-size:10.5px; color:var(--ink-3); display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+  .sinc i{width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block}
+  .sinc.pendente i{background:var(--terceiro)}
+  .sinc.erro i, .sinc.offline i{background:var(--alerta)}
+  .sinc.girando i{animation:pisca 1s infinite}
+  .sinc.local i{background:var(--ink-3)}
+  @keyframes pisca{50%{opacity:.25}}
+
+  /* ===== Corpo (área que rola) ===== */
+  .corpo{flex:1; overflow-y:auto; overflow-x:hidden; padding:16px 16px 88px; display:flex; flex-direction:column; gap:16px; overscroll-behavior:contain}
+  .corpo.form{padding-bottom:0}
+  .corpo.semabas{padding-bottom:24px}
+  .corpo > section{display:flex; flex-direction:column; gap:16px}
+
+  h2.sec{margin:0; font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)}
+  .grupo{display:flex; flex-direction:column; gap:8px}
+  .cartao{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:16px; color:var(--ink)}
+  .cartao.plano{background:transparent; border-style:dashed}
+  button.cartao{text-align:left; font:inherit; cursor:pointer; width:100%; display:block}
+  .texto-plano{font-size:12.5px; color:var(--ink-2)}
+  .nota{font-size:12px; color:var(--ink-3)}
+  .nota.centro{text-align:center}
+
+  .par{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .tile{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:14px; min-width:0}
+  .tile .rot{font-size:11px; color:var(--ink-2); line-height:1.3}
+  .tile .val{font-size:20px; font-weight:600; letter-spacing:-.02em; margin-top:6px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .tile .sub{font-size:11px; color:var(--ink-3); margin-top:4px}
+  .tile.entrou{border-left:3px solid var(--accent)} .tile.entrou .val{color:var(--accent)}
+  .tile.saiu{border-left:3px solid var(--alerta)} .tile.saiu .val{color:var(--alerta)}
+
+  .heroi{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:22px 18px; text-align:center}
+  .heroi .rot{font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)}
+  .heroi .v{font-size:36px; font-weight:600; letter-spacing:-.03em; margin-top:4px; line-height:1.1; overflow-wrap:anywhere}
+  .heroi .sub{font-size:12px; color:var(--ink-3); margin-top:8px}
+
+  /* linha de lista: nome/detalhe à esquerda, valor à direita */
+  .linha{display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:9px 0; width:100%}
+  .linha + .linha{border-top:1px solid var(--line)}
+  .linha:first-child{padding-top:0} .linha:last-child{padding-bottom:0}
+  .linha .esq{display:flex; flex-direction:column; gap:2px; min-width:0}
+  .linha .nome{font-size:14px; overflow-wrap:anywhere}
+  .linha .det{font-size:11.5px; color:var(--ink-3); overflow-wrap:anywhere}
+  .linha .dir{font-size:14px; font-weight:500; white-space:nowrap; text-align:right}
+  /* linha que é botão (toque abre o item) */
+  button.linha{font:inherit; color:inherit; background:none; border:none; border-radius:0; cursor:pointer; text-align:left; min-height:44px; align-items:center}
+  button.linha:first-child{padding-top:9px} button.linha:last-child{padding-bottom:9px}
+  .cartao > button.linha:first-child{margin-top:-9px} .cartao > button.linha:last-child{margin-bottom:-9px}
+  .linha.total .nome{font-weight:600}
+  /* cadastro desativado: em cinza na lista de Config */
+  .linha.desativado .esq{opacity:.6}
+
+  .barras{display:flex; flex-direction:column; gap:10px}
+  .barra .cab{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; margin-bottom:5px}
+  .barra .cab b{font-weight:500; overflow-wrap:anywhere}
+  .barra .cab span{color:var(--ink-2); font-size:12.5px; white-space:nowrap}
+  .trilha{height:8px; background:var(--trilha); border-radius:999px; overflow:hidden}
+  .preenche{height:100%; border-radius:999px; background:var(--accent)}
+  .preenche.ela{background:var(--esposa)}
+  .preenche.terc{background:var(--terceiro)}
+  .legenda{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--ink-2); margin-top:10px}
+  .legenda i{width:9px; height:9px; border-radius:3px; display:inline-block; margin-right:5px}
+
+  .selo{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:3px 8px; border-radius:999px; white-space:nowrap; vertical-align:middle}
+  .selo.casal{background:var(--accent-soft); color:var(--accent)}
+  .selo.terc{background:var(--terceiro-soft); color:var(--terceiro)}
+  .selo.aberto{background:var(--alerta-soft); color:var(--alerta)}
+  .selo.pago{background:var(--accent-soft); color:var(--accent)}
+  .selo.vago{background:var(--surface-2); color:var(--ink-3); border:1px solid var(--line)}
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{
+    font:inherit; font-size:13px; padding:8px 13px; border-radius:999px; cursor:pointer;
+    background:var(--surface); border:1px solid var(--line-2); color:var(--ink-2); min-height:44px;
+  }
+  .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--botao-ink); font-weight:500}
+
+  /* campo grande de valor (Lançar) */
+  .valorao{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:18px 16px; text-align:center}
+  .valorao label, .valorao .rot{font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); display:block}
+  .valorao .v{font-size:38px; font-weight:600; letter-spacing:-.03em; margin-top:6px; color:var(--accent); overflow-wrap:anywhere}
+  .valorao .linhavalor{display:flex; align-items:baseline; justify-content:center; gap:6px; margin-top:6px}
+  .valorao .moeda{font-size:24px; font-weight:600; color:var(--accent)}
+  .valorao input{
+    font:inherit; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:38px; font-weight:600; letter-spacing:-.03em;
+    color:var(--accent); background:transparent; border:none; border-bottom:2px solid var(--line-2);
+    width:100%; max-width:240px; text-align:center; padding:2px 0; border-radius:0;
+  }
+  .valorao input::placeholder{color:var(--line-2)}
+  .valorao .ajuda{font-size:12px; color:var(--ink-3); margin-top:8px}
+
+  .campo{display:flex; flex-direction:column; gap:6px; min-width:0}
+  .campo > label{font-size:12px; color:var(--ink-2); font-weight:500}
+  .campo input, .campo select, .campo textarea{
+    font:inherit; font-size:16px; padding:11px 12px; border-radius:11px; min-height:46px;
+    border:1px solid var(--line-2); background:var(--surface); color:var(--ink); width:100%;
+  }
+  .campo textarea{min-height:80px; resize:vertical}
+  .campo .ajuda{font-size:11.5px; color:var(--ink-3)}
+  .marca{display:flex; align-items:center; gap:10px; min-height:44px; font-size:14px; cursor:pointer}
+  .marca input{width:22px; height:22px; accent-color:var(--accent)}
+  .dica{font-size:12px; color:var(--ink-2); background:var(--accent-soft); border-radius:11px; padding:10px 12px; line-height:1.4}
+  .dica b{color:var(--accent)}
+  .dica.alerta{background:var(--alerta-soft)} .dica.alerta b{color:var(--alerta)}
+  .erro{font-size:13px; color:var(--alerta); background:var(--alerta-soft); border-radius:11px; padding:10px 12px; font-weight:500}
+
+  .botao{
+    font:inherit; font-weight:600; font-size:15px; width:100%; min-height:48px; padding:10px 14px;
+    border-radius:13px; border:none; cursor:pointer; background:var(--accent); color:var(--botao-ink);
+    display:flex; align-items:center; justify-content:center; text-align:center; text-decoration:none;
+  }
+  .botao.grande{min-height:58px; font-size:17px}
+  .botao.zap{background:#1f7a4d; color:#fff}
+  .botao.fraco{background:var(--surface); color:var(--ink); border:1px solid var(--line-2); font-weight:500}
+  .botao.perigo{background:var(--surface); color:var(--alerta); border:1px solid var(--alerta); font-weight:500}
+  .botao.mini{width:auto; min-height:44px; font-size:13px; padding:8px 14px; border-radius:11px}
+  .botao:disabled{opacity:.55; cursor:default}
+  .botoes{display:flex; gap:8px} .botoes > *{flex:1}
+
+  .atalho{
+    font:inherit; font-size:13px; text-align:left; width:100%; cursor:pointer; min-height:48px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+    padding:13px 16px; color:var(--ink); display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .atalho .det{display:block; font-size:11.5px; color:var(--ink-3)}
+  .atalho .seta{color:var(--accent); font-weight:600}
+
+  .zapview{
+    font-size:13px; line-height:1.5; background:var(--surface-2); border:1px solid var(--line);
+    border-left:3px solid #1f7a4d; border-radius:11px; padding:12px; color:var(--ink-2); white-space:pre-line; overflow-wrap:anywhere;
+  }
+
+  /* seletor de mês ← setembro de 2026 → */
+  .seletor-mes{display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:2px}
+  .seletor-mes button{font:inherit; font-size:20px; background:none; border:none; color:var(--accent); cursor:pointer; min-width:48px; min-height:44px; border-radius:12px}
+  .seletor-mes .rotulo{font-size:14px; font-weight:600; text-align:center}
+  .seletor-mes .rotulo small{display:block; font-size:11px; font-weight:400; color:var(--ink-3)}
+
+  /* estado vazio */
+  .vazio{background:transparent; border:1px dashed var(--line-2); border-radius:var(--r); padding:18px 16px; text-align:center; display:flex; flex-direction:column; gap:12px; align-items:center}
+  .vazio p{margin:0; font-size:13.5px; color:var(--ink-2)}
+
+  /* abas de baixo */
+  .abas{
+    flex:none; display:grid; grid-template-columns:repeat(6,1fr); position:relative; z-index:2;
+    background:var(--surface); border-top:1px solid var(--line);
+    padding:6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .aba{
+    font:inherit; font-size:10px; background:none; border:none; cursor:pointer; color:var(--ink-3);
+    display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 1px; min-height:48px; border-radius:10px;
+  }
+  .aba svg{width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round}
+  .aba[aria-selected="true"]{color:var(--accent); font-weight:600}
+  .flutua{
+    position:absolute; right:16px; bottom:calc(76px + env(safe-area-inset-bottom, 0px)); z-index:3;
+    width:56px; height:56px; border-radius:50%; border:none; cursor:pointer;
+    background:var(--accent); color:var(--botao-ink); box-shadow:var(--shadow);
+    display:grid; place-items:center; font-size:28px; line-height:1; padding:0 0 3px;
+  }
+  /* com o teclado aberto, esconde as abas e o botão + para sobrar espaço */
+  body.digitando .abas, body.digitando .flutua{display:none}
+
+  .volta{font:inherit; font-size:14px; background:none; border:none; color:var(--accent); cursor:pointer; padding:0; text-align:left; font-weight:500; min-height:44px; align-self:flex-start}
+  .naoinf{font-size:11px; color:var(--alerta); font-weight:600; letter-spacing:.03em}
+
+  /* rodapé grudado do formulário, com o botão Salvar sempre à vista */
+  .rodape-form{
+    position:sticky; bottom:0; margin:0 -16px; padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(to bottom, transparent, var(--surface-2) 14px); display:flex; flex-direction:column; gap:6px; z-index:1;
+  }
+
+  /* código do casal */
+  .codigo{font-size:22px; font-weight:600; letter-spacing:.08em; text-align:center; padding:8px 0}
+
+  /* aviso rápido (toast) e confirmação dentro da página */
+  .toast{
+    position:absolute; left:16px; right:16px; top:calc(76px + env(safe-area-inset-top,0px)); z-index:20;
+    background:var(--ink); color:var(--surface); border-radius:12px; padding:12px 14px; font-size:14px;
+    box-shadow:var(--shadow); text-align:center;
+  }
+  .modal-fundo{position:absolute; inset:0; z-index:30; background:rgba(10,14,11,.45); display:flex; align-items:flex-end; justify-content:center; padding:16px}
+  .modal{background:var(--surface); color:var(--ink); border-radius:20px; padding:20px 16px 16px; width:100%; max-width:400px; display:flex; flex-direction:column; gap:14px; box-shadow:var(--shadow)}
+  .modal p{margin:0; font-size:15px; line-height:1.45}
+  .modal .sub{font-size:13px; color:var(--ink-2)}
+
+  /* primeiro acesso */
+  .boasvindas{text-align:center; display:flex; flex-direction:column; gap:10px; padding:12px 4px 4px}
+  .boasvindas h2{margin:0; font-size:22px; letter-spacing:-.02em}
+  .boasvindas p{margin:0; color:var(--ink-2); font-size:14px}
+
+  *:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+</style>
+</head>
+<body>
+<div class="palco">
+  <div class="fone" id="fone">
+    <header class="topo">
+      <div class="esq">
+        <h1 id="tituloTela">Gastos do Casal</h1>
+        <div class="mes" id="subTela"></div>
+      </div>
+      <div class="dir">
+        <span class="quem" id="quem" hidden><span class="ponto"></span><span id="quemNome"></span></span>
+        <span class="sinc" id="sinc" role="status" aria-live="polite"><i></i><span id="sincTexto">abrindo…</span></span>
+      </div>
+    </header>
+
+    <!-- cada tela é desenhada aqui dentro pelo app.js -->
+    <main class="corpo" id="corpo" tabindex="-1">
+      <noscript><div class="vazio"><p>Este aplicativo precisa de JavaScript ligado.</p></div></noscript>
+    </main>
+
+    <button class="flutua" id="btnLancar" aria-label="Lançar gasto" hidden>+</button>
+
+    <nav class="abas" id="abas" role="tablist" aria-label="Telas" hidden>
+      <button class="aba" role="tab" aria-selected="true" data-tela="inicio">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Início</button>
+      <button class="aba" role="tab" aria-selected="false" data-tela="mes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M9.3 19V5M14.7 19v-7M20 19v-4"/></svg>Mês</button>
+      <button class="aba" role="tab" aria-selected="false" data-tela="cartoes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19"/></svg>Cartões</button>
+      <button class="aba" role="tab" aria-selected="false" data-tela="parcelas">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="7" rx="1.6"/><rect x="13" y="4" width="8" height="7" rx="1.6"/><rect x="3" y="13" width="8" height="7" rx="1.6"/><rect x="13" y="13" width="8" height="7" rx="1.6"/></svg>Parcelas</button>
+      <button class="aba" role="tab" aria-selected="false" data-tela="parentes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><path d="M16 5.2A3.2 3.2 0 0 1 16 11.6M17.5 14.5c2 .6 3.5 2.6 3.5 5"/></svg>Parentes</button>
+      <button class="aba" role="tab" aria-selected="false" data-tela="config">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M4.2 7.5l2.2 1.3M17.6 15.2l2.2 1.3M19.8 7.5l-2.2 1.3M6.4 15.2l-2.2 1.3"/></svg>Config</button>
+    </nav>
+
+    <!-- aviso rápido e confirmação (preenchidos pelo app.js) -->
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <div class="modal-fundo" id="modal" hidden></div>
+  </div>
+</div>
+
+<!-- ordem obrigatória (CONTRATO.md, seção 1) -->
+<script src="config.js"></script>
+<script src="regras.js"></script>
+<script src="dados.js"></script>
+<script src="app.js"></script>
+<script>
+  // Service worker: faz o app abrir sem internet. Se o arquivo não existir, segue sem ele.
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>
