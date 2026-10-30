@@ -1,7 +1,7 @@
 /*
  * regras.js — Gastos do Casal · cálculos puros
  *
- * Dono: Agente Regras. Especificação: CONTRATO.md, seções 2, 3, 4 e 5.
+ * Dono: Agente Regras. Especificação: CONTRATO.md, seções 2, 3, 4, 5 e 8 (orçamento, R9).
  *
  * O QUE ESTE ARQUIVO FAZ
  *   Recebe a lista de registros (tudo junto, de todos os tipos) e devolve números e
@@ -1724,7 +1724,268 @@
   }
 
   // ===================================================================================
-  // 10. O QUE FICA DISPONÍVEL PARA O RESTO DO APP
+  // 10. R9 — ORÇAMENTO DO SALÁRIO (CONTRATO.md, seção 8)
+  // ===================================================================================
+
+  // Regras de divisão aceitas. Qualquer outro valor no ajuste vira a padrão (70/20/10).
+  var REGRAS_ORCAMENTO = {
+    "70/20/10": { fixas: 70, livre: 20, investir: 10 },
+    "60/30/10": { fixas: 60, livre: 30, investir: 10 }
+  };
+  var REGRA_PADRAO = "70/20/10";
+  var REFERENCIA_MERCADINHO_PADRAO = 50000; // R$ 500,00 (seção 8.1)
+
+  /**
+   * Deixa um nome pronto para comparar: sem acento, minúsculo, sem espaço sobrando.
+   * "  Compra   Mensal " -> "compra mensal";  "Mercadinho" -> "mercadinho".
+   */
+  function nomeComparavel(t) {
+    if (t == null) return "";
+    return String(t).normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  /**
+   * Quais ids de categoria contam como "Compra mensal" ou "Mercadinho" (seção 8.1):
+   *   - se o ajuste tem o id (categoria_compra_mensal_id / categoria_mercadinho_id), vale esse id;
+   *   - se não tem, procura categoria VIVA e ativa (ativo !== false) com o nome, sem diferenciar
+   *     maiúsculas e acentos. Se houver mais de uma com o mesmo nome, todas contam.
+   * Devolve um objeto {id: true}. Vazio = categoria não encontrada (soma fica 0).
+   */
+  function idsCategoria(idx, idNoAjuste, nomeProcurado) {
+    var ids = {};
+    if (idNoAjuste != null) { ids[idNoAjuste] = true; return ids; }
+    var alvo = nomeComparavel(nomeProcurado);
+    var cats = idx.tipo("categoria");
+    for (var i = 0; i < cats.length; i++) {
+      if (cats[i].ativo === false) continue;
+      if (nomeComparavel(cats[i].nome) === alvo && cats[i].id != null) ids[cats[i].id] = true;
+    }
+    return ids;
+  }
+
+  /**
+   * Quantas ocorrências PREVISTAS a fonte tem no mês, para a BASE do orçamento.
+   *   - fonte precisa valer no mês (valeNoPeriodo: inicio, fim e ativo);
+   *   - "avulso" nunca entra (não tem previsto);
+   *   - uma ocorrência por dia válido em `dias` (quinzenal [15,30] = 2);
+   *   - "mensal" com `dias` vazio ou só com dia null conta como 1 ocorrência
+   *     (decisão do encarregado: o salário existe, só o dia não foi informado).
+   */
+  function ocorrenciasNaBase(fonte, mes) {
+    if (fonte.periodicidade === "avulso") return 0;
+    if (!valeNoPeriodo(fonte, mes)) return 0;
+    var dias = Array.isArray(fonte.dias) ? fonte.dias.filter(function (d) { return ehInteiro(d) && d >= 1 && d <= 31; }) : [];
+    if (dias.length > 0) return dias.length;
+    return fonte.periodicidade === "mensal" ? 1 : 0;
+  }
+
+  /**
+   * A fonte pode ser base do orçamento? Viva, NÃO extra (seção 8.1: extra nunca entra na base),
+   * não avulsa e com valor_previsto informado (sem previsto não se inventa salário).
+   */
+  function fontePodeSerBase(fonte) {
+    return !!fonte && fonte.extra !== true && fonte.periodicidade !== "avulso" && ehInteiro(fonte.valor_previsto);
+  }
+
+  /**
+   * Base do orçamento no mês: {base: centavos|null, origem:[{fonte_id, nome}]}.
+   *   - ajuste.fonte_salario_id aponta para fonte viva que pode ser base -> só ela.
+   *     (Se essa fonte não vale no mês — ainda não começou, acabou, desativada — não há
+   *     salário no mês: base null. Não se troca por outra fonte.)
+   *   - ausente, ou aponta para fonte inexistente/apagada (ou extra/avulsa, que nunca podem ser
+   *     base) -> soma de TODAS as fontes que podem ser base e valem no mês.
+   *   - nenhuma fonte contribuiu -> base null ("NÃO INFORMADO").
+   */
+  function baseDoOrcamento(idx, ajuste, mes) {
+    var escolhida = ajuste && ajuste.fonte_salario_id != null ? buscar(idx, ajuste.fonte_salario_id, "fonte") : null;
+    var candidatas = fontePodeSerBase(escolhida) ? [escolhida] : idx.tipo("fonte").filter(fontePodeSerBase);
+    var base = 0, origem = [];
+    for (var i = 0; i < candidatas.length; i++) {
+      var fo = candidatas[i];
+      var n = ocorrenciasNaBase(fo, mes);
+      if (n === 0) continue;
+      base += fo.valor_previsto * n;
+      origem.push({ fonte_id: fo.id, nome: fo.nome != null ? fo.nome : null });
+    }
+    return { base: origem.length ? base : null, origem: origem };
+  }
+
+  /**
+   * Regras.resumoOrcamento(registros, mes, hoje) -> objeto do orçamento do mês "AAAA-MM" (R9)
+   *
+   *   regra        "70/20/10" (padrão) ou "60/30/10", do ajuste:casal.regra_orcamento
+   *   pcts         {fixas, livre, investir} da regra
+   *   base         centavos previstos do salário no mês (ver baseDoOrcamento) ou null
+   *   baseOrigem   [{fonte_id, nome}] fontes que formaram a base
+   *   fixas        {usado, alvo, contas, parcelas}
+   *                contas = contas fixas do mês (mesma conta do R3: real se confirmada, senão previsto)
+   *                parcelas = parcelas de compras do CASAL com competência no mês
+   *                usado = contas + parcelas
+   *   livre        {usado, alvo}  usado = compras do CASAL únicas com data_compra no mês
+   *   investir     {sobra, alvo}  sobra = base − fixas.usado − livre.usado (pode ser negativa; base null -> null)
+   *   sobraSalario = investir.sobra
+   *   mercado      {compraMensal, mercadinho, idasMercadinho, referencia, nivel}
+   *                compraMensal/mercadinho = compras do casal da categoria (únicas no mês + parcelas
+   *                com competência no mês); idasMercadinho = quantas compras ÚNICAS de Mercadinho;
+   *                referencia = ajuste.referencia_mercadinho (inteiro > 0) ou 50000;
+   *                nivel: "passou" ≥ 100%, "alto" ≥ 80%, "metade" ≥ 50%, senão "ok" (da referência)
+   *   extras       {recebido, aReceber, itens:[{fonte_id, nome, recebido|null, previsto|null, data|null}]}
+   *                ocorrências das fontes extra:true (confirmadas = recebido; não confirmadas com
+   *                previsto = a receber) + receitas avulsas do mês ligadas a fonte extra (recebido).
+   *                Itens em ordem de data (recebida ou prevista), mais antiga primeiro.
+   *   metas        [{reserva_id, nome, guardado|null, meta, pct}] reservas com meta (inteiro > 0),
+   *                meta crescente; pct = guardado/meta com 1 casa (null se guardado ausente)
+   *
+   * alvo = round(base × pct / 100); base null -> todos os alvos null.
+   * Garantia: fixas.usado + livre.usado = resumoMes(...).gastou (mesma regra, só separada).
+   * Compra de terceiro nunca entra. resumoMes não muda. Mês inválido -> null.
+   */
+  function resumoOrcamento(registros, mes, hoje) {
+    if (!lerMes(mes)) return null;
+    var idx = indexar(registros);
+    var ajuste = buscar(idx, "ajuste:casal", "ajuste") || {};
+
+    // --- regra e porcentagens ---
+    var regra = REGRAS_ORCAMENTO[ajuste.regra_orcamento] ? ajuste.regra_orcamento : REGRA_PADRAO;
+    var p = REGRAS_ORCAMENTO[regra];
+    var pcts = { fixas: p.fixas, livre: p.livre, investir: p.investir };
+
+    // --- base (salário previsto) ---
+    var b = baseDoOrcamento(idx, ajuste, mes);
+    var base = b.base;
+    function alvo(pc) { return base == null ? null : Math.round(base * pc / 100); }
+
+    // --- categorias do mercado ---
+    var catCompra = idsCategoria(idx, ajuste.categoria_compra_mensal_id, "Compra mensal");
+    var catMercadinho = idsCategoria(idx, ajuste.categoria_mercadinho_id, "Mercadinho");
+    var compraMensal = 0, mercadinho = 0, idasMercadinho = 0;
+
+    // --- compras do casal: únicas (livre) e parcelas (fixas) — mesma separação do resumoMes ---
+    var livreUsado = 0, parcelasMes = 0;
+    var lancs = idx.tipo("lancamento");
+    for (var i = 0; i < lancs.length; i++) {
+      var l = lancs[i];
+      if (l.de_quem !== "casal") continue; // compra de terceiro nunca entra (R3)
+      var parcelas = parcelasComIndice(l, idx, hoje);
+      for (var k = 0; k < parcelas.length; k++) {
+        var pc = parcelas[k];
+        if (pc.competencia !== mes) continue;
+        var valor = pc.valor || 0;
+        var ehParcela = pc.n > 1; // igual ao resumoMes: n = 1 é compra única
+        if (ehParcela) parcelasMes += valor;
+        else livreUsado += valor;
+        if (l.categoria_id != null && catCompra[l.categoria_id]) compraMensal += valor;
+        if (l.categoria_id != null && catMercadinho[l.categoria_id]) {
+          mercadinho += valor;
+          if (!ehParcela) idasMercadinho++;
+        }
+      }
+    }
+
+    // --- contas fixas do mês (R3, inclusive confirmações de contas na lixeira) ---
+    var contasMes = 0;
+    var ocs = ocorrenciasFixas(idx, mes);
+    for (var c = 0; c < ocs.length; c++) contasMes += ocs[c].valor || 0;
+
+    var fixasUsado = contasMes + parcelasMes;
+    var sobra = base == null ? null : base - fixasUsado - livreUsado;
+
+    // --- nível do mercadinho (conta em inteiros: sem número quebrado) ---
+    var referencia = ehInteiro(ajuste.referencia_mercadinho) && ajuste.referencia_mercadinho > 0
+      ? ajuste.referencia_mercadinho : REFERENCIA_MERCADINHO_PADRAO;
+    var nivel = "ok";
+    if (mercadinho * 100 >= referencia * 100) nivel = "passou";
+    else if (mercadinho * 100 >= referencia * 80) nivel = "alto";
+    else if (mercadinho * 100 >= referencia * 50) nivel = "metade";
+
+    // --- extras (fora do orçamento) ---
+    var extrasItens = [], recebidoExtra = 0, aReceberExtra = 0;
+    var confUsadas = {};
+    var fontes = idx.tipo("fonte");
+    for (var f = 0; f < fontes.length; f++) {
+      var fo = fontes[f];
+      if (fo.extra !== true) continue;
+      // mesmas ocorrências que o resumoMes mostra (um por dia válido), para a tela poder confirmar
+      var dias = Array.isArray(fo.dias) ? fo.dias.filter(function (d) { return ehInteiro(d) && d >= 1 && d <= 31; }) : [];
+      dias = dias.slice().sort(function (a, z) { return a - z; });
+      for (var o = 0; o < dias.length; o++) {
+        var conf = acharConfirmacaoReceita(idx, fo, mes, o + 1);
+        if (!conf && !valeNoPeriodo(fo, mes)) continue;
+        var prev = ehInteiro(fo.valor_previsto) ? fo.valor_previsto : null;
+        if (conf) {
+          confUsadas[conf.id] = true;
+          var rc = ehInteiro(conf.valor_recebido) ? conf.valor_recebido : null;
+          recebidoExtra += rc || 0;
+          extrasItens.push({ fonte_id: fo.id, nome: fo.nome != null ? fo.nome : null, recebido: rc, previsto: prev,
+            data: conf.data_recebimento != null ? conf.data_recebimento : null, _ordem: conf.data_recebimento || dataDoMes(mes, dias[o]) });
+        } else if (prev != null) {
+          aReceberExtra += prev;
+          extrasItens.push({ fonte_id: fo.id, nome: fo.nome != null ? fo.nome : null, recebido: null, previsto: prev,
+            data: null, _ordem: dataDoMes(mes, dias[o]) });
+        }
+      }
+    }
+    // confirmação de fonte extra que saiu do plano (fonte na lixeira ou dias mudados): conta como
+    // recebido, igual ao "Entrou" do resumoMes
+    var confsR = idx.tipo("receita_confirmada");
+    for (var q = 0; q < confsR.length; q++) {
+      var cr = confsR[q];
+      if (cr.mes !== mes || confUsadas[cr.id]) continue;
+      var foT = buscarTodos(idx, cr.fonte_id, "fonte");
+      if (!foT || foT.extra !== true) continue;
+      confUsadas[cr.id] = true;
+      var rcb = ehInteiro(cr.valor_recebido) ? cr.valor_recebido : null;
+      recebidoExtra += rcb || 0;
+      extrasItens.push({ fonte_id: cr.fonte_id, nome: foT.nome != null ? foT.nome : null, recebido: rcb, previsto: null,
+        data: cr.data_recebimento != null ? cr.data_recebimento : null, _ordem: cr.data_recebimento || "" });
+    }
+    // receitas avulsas do mês ligadas a fonte extra
+    var avs = idx.tipo("receita_avulsa");
+    for (var r = 0; r < avs.length; r++) {
+      var av = avs[r];
+      if (mesDe(av.data_recebimento) !== mes) continue;
+      var foA = buscarTodos(idx, av.fonte_id, "fonte");
+      if (!foA || foA.extra !== true) continue;
+      var vr = ehInteiro(av.valor_recebido) ? av.valor_recebido : null;
+      recebidoExtra += vr || 0;
+      extrasItens.push({ fonte_id: av.fonte_id, nome: foA.nome != null ? foA.nome : null, recebido: vr, previsto: null,
+        data: av.data_recebimento, _ordem: av.data_recebimento });
+    }
+    extrasItens.sort(function (a, z) { var x = a._ordem || "", y = z._ordem || ""; return x < y ? -1 : x > y ? 1 : 0; });
+    for (var e = 0; e < extrasItens.length; e++) delete extrasItens[e]._ordem;
+
+    // --- metas (reservas com meta), meta crescente ---
+    var metas = idx.tipo("reserva").filter(function (rs) { return ehInteiro(rs.meta) && rs.meta > 0; })
+      .map(function (rs) {
+        var guardado = ehInteiro(rs.valor_guardado) ? rs.valor_guardado : null;
+        return { reserva_id: rs.id, nome: rs.nome != null ? rs.nome : null, guardado: guardado, meta: rs.meta,
+          pct: guardado == null ? null : pct(guardado, rs.meta) };
+      })
+      .sort(function (a, z) {
+        if (a.meta !== z.meta) return a.meta - z.meta;
+        return String(a.nome) < String(z.nome) ? -1 : String(a.nome) > String(z.nome) ? 1 : 0;
+      });
+
+    return {
+      mes: mes,
+      regra: regra,
+      pcts: pcts,
+      base: base,
+      baseOrigem: b.origem,
+      fixas: { usado: fixasUsado, alvo: alvo(pcts.fixas), contas: contasMes, parcelas: parcelasMes },
+      livre: { usado: livreUsado, alvo: alvo(pcts.livre) },
+      investir: { sobra: sobra, alvo: alvo(pcts.investir) },
+      sobraSalario: sobra,
+      mercado: { compraMensal: compraMensal, mercadinho: mercadinho, idasMercadinho: idasMercadinho,
+        referencia: referencia, nivel: nivel },
+      extras: { recebido: recebidoExtra, aReceber: aReceberExtra, itens: extrasItens },
+      metas: metas
+    };
+  }
+
+  // ===================================================================================
+  // 11. O QUE FICA DISPONÍVEL PARA O RESTO DO APP
   // ===================================================================================
 
   var Regras = {
@@ -1745,6 +2006,8 @@
     textoWhatsApp: textoWhatsApp,
     linkWhatsApp: linkWhatsApp,
     paraCSV: paraCSV,
+    // seção 8 do contrato (R9)
+    resumoOrcamento: resumoOrcamento,
     // ajudantes extras (úteis para a tela; não estão na seção 5)
     NAO_INFORMADO: NAO_INFORMADO,
     dataCurta: dataCurta,   // "2026-09-19" -> "19/09"
