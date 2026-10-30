@@ -325,7 +325,7 @@
       case "fixa_confirmada": p = porId(r.conta_fixa_id, regs); return (p ? p.nome : NI) + " de " + (r.mes ? mesExtenso(r.mes) : NI) + " — " + dinheiro(r.valor_real);
       case "receita_confirmada": p = porId(r.fonte_id, regs); return (p ? p.nome : NI) + " (" + (r.ocorrencia || "?") + "ª de " + (r.mes ? mesExtenso(r.mes) : NI) + ") — " + dinheiro(r.valor_recebido);
       case "receita_avulsa": return (r.descricao || NI) + " — " + dinheiro(r.valor_recebido);
-      case "ajuste": return "Nomes do casal";
+      case "ajuste": return "Nomes do casal e orçamento";
       default: return r.nome || r.descricao || r.id;
     }
   }
@@ -547,14 +547,19 @@
     var a = document.activeElement;
     var digitando = !!(a && a.matches && a.matches(SELETOR_DIGITAVEL) && document.body.contains(a));
     document.body.classList.toggle("digitando", digitando);
+    // terminou de digitar e os dados mudaram nesse meio-tempo: redesenha agora
+    if (!digitando && redesenhoAdiado) { redesenhoAdiado = false; aoMudarDados(); }
   }
 
   // Quando os dados mudam (salvou, puxou da nuvem): redesenha, exceto em formulário
   // (para não apagar o que a pessoa está digitando). O indicador sempre atualiza.
-  var redesenhoAgendado = false;
+  // Fora de formulário (ex.: Config > Orçamento) também não redesenha enquanto um campo está
+  // com o foco: o redesenho fica adiado até a pessoa sair do campo (ver conferirDigitando).
+  var redesenhoAgendado = false, redesenhoAdiado = false;
   function aoMudarDados() {
     atualizarSinc();
     if (telaEhFormulario || redesenhoAgendado) return;
+    if (document.body.classList.contains("digitando")) { redesenhoAdiado = true; return; }
     if (!document.getElementById("modal").hidden) return;
     redesenhoAgendado = true;
     requestAnimationFrame(function () { redesenhoAgendado = false; desenhar(false); });
@@ -738,13 +743,27 @@
     var f = Regras.faturasDoMes(paraRegras(), mesFat, hj);
     var conteudo = [seletorMes(ui.mes, function (m) { ui.mes = m; desenhar(false); })];
 
+    // Orçamento do salário (R9): base, faixas, mercado, extras e metas
+    var orc = Regras.resumoOrcamento(paraRegras(), ui.mes, hj);
+    var temBase = !!orc && orc.base !== null && orc.base !== undefined;
+
     conteudo.push(h("div", { class: "par" },
       tile("Entrou", dinheiro(r.entrou), "a receber ainda: " + dinheiro(r.aReceber), "entrou"),
       tile("Gastou", dinheiro(r.gastou), "só gasto de vocês dois", "saiu")));
-    conteudo.push(h("div", { class: "heroi" },
-      h("div", { class: "rot" }, "Sobrou"),
-      h("div", { class: "v num", style: "color:var(" + (r.sobrou < 0 ? "--alerta" : "--accent") + ")" }, dinheiro(r.sobrou)),
-      h("div", { class: "sub" }, r.sobrou < 0 ? "gastou mais do que entrou de verdade" : "do que já entrou de verdade")));
+    if (temBase) {
+      // Herói novo: quanto sobra do SALÁRIO (renda extra não entra nessa conta)
+      var gastosOrc = orc.fixas.usado + orc.livre.usado;
+      conteudo.push(h("div", { class: "heroi" },
+        h("div", { class: "rot" }, "Sobra do salário no mês"),
+        h("div", { class: "v num", style: "color:var(" + (orc.sobraSalario < 0 ? "--alerta" : "--accent") + ")" }, dinheiro(orc.sobraSalario)),
+        h("div", { class: "sub" }, "Salário " + dinheiro(orc.base) + " − gastos " + dinheiro(gastosOrc))));
+    } else {
+      // Sem salário cadastrado: continua o herói antigo (Entrou − Gastou)
+      conteudo.push(h("div", { class: "heroi" },
+        h("div", { class: "rot" }, "Sobrou"),
+        h("div", { class: "v num", style: "color:var(" + (r.sobrou < 0 ? "--alerta" : "--accent") + ")" }, dinheiro(r.sobrou)),
+        h("div", { class: "sub" }, r.sobrou < 0 ? "gastou mais do que entrou de verdade" : "do que já entrou de verdade")));
+    }
     conteudo.push(h("button", { type: "button", class: "botao grande", onclick: function () { ir("lancar"); } }, "+  Lançar um gasto"));
 
     // Começando do zero: mostra o caminho dos cadastros
@@ -757,12 +776,167 @@
           botao("Cartões", function () { ir("cadastros", { tipo: "cartao" }); }, "fraco mini"))));
     }
 
+    // Orçamento do salário: aviso do mercadinho e os cards (CONTRATO seção 8.3)
+    if (orc) {
+      var aviso = avisoMercadinho(orc.mercado);
+      if (aviso) conteudo.splice(conteudo.length - (semCadastros ? 1 : 0), 0, aviso); // logo abaixo do botão Lançar
+      conteudo.push(cardOrcamento(orc, temBase));
+      conteudo.push(cardMercado(orc.mercado));
+      var temFonteExtra = doTipo("fonte", regs).some(function (fo) { return fo.extra === true; });
+      if (temFonteExtra || (orc.extras.itens || []).length) conteudo.push(cardExtra(orc.extras));
+      if ((orc.metas || []).length) conteudo.push(cardMetas(orc.metas, orc.base));
+    }
+
     conteudo.push(atalho("Ver o mês em detalhe", "receitas, categorias e todos os lançamentos", null, function () { trocarAba("mes"); }));
     conteudo.push(atalho("Faturas a pagar em " + nomeMes(mesFat),
       f.totalTerceiros > 0 ? dinheiro(f.totalTerceiros) + " disso é de parentes" : (doTipo("cartao", regs).length ? "nenhuma compra de parente" : "nenhum cartão cadastrado"),
       dinheiro(f.total), function () { ui.mesFatura = mesFat; trocarAba("cartoes"); }));
     return { titulo: "Início", sub: maiuscula(mesExtenso(ui.mes)), conteudo: conteudo };
   };
+
+  /* ---------- 5.2.1 Orçamento do salário no Início (CONTRATO seção 8.3) ---------- */
+
+  // Reais sem centavos, para caber nas faixas: 548237 -> "R$ 5.482"; sem "R$": "5.482"
+  function reaisCurto(c, semSimbolo) {
+    if (c === null || c === undefined) return NI;
+    var r = Math.round(Math.abs(c) / 100);
+    var t = String(r).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (c < 0 && r > 0 ? "−" : "") + (semSimbolo ? "" : "R$ ") + t;
+  }
+  // Porcentagem com vírgula: 4.2 -> "4,2%"
+  function pctBR(p) { return (Math.round(p * 10) / 10).toString().replace(".", ",") + "%"; }
+
+  // Cor da barra de uma faixa: normal; "quase" a partir de 80% do alvo; "estourou" acima de 100%
+  function classeFaixa(usado, alvo) {
+    if (alvo === null || alvo === undefined) return "";
+    if (alvo <= 0) return usado > 0 ? "estourou" : "";
+    if (usado > alvo) return "estourou";
+    if (usado >= alvo * 0.8) return "quase";
+    return "";
+  }
+
+  // Uma faixa: título e "R$ X de R$ Y" em cima, barra no meio, rodapé embaixo
+  function faixa(titulo, direita, pct, classe, rodape) {
+    return h("div", { class: "faixa" },
+      h("div", { class: "cab" }, h("b", null, titulo), h("span", { class: "num" }, direita)),
+      trilha(pct, classe),
+      rodape ? h("div", { class: "rodape" }, rodape) : null);
+  }
+
+  /*
+   * Aviso do mercadinho (só quando o nível não é "ok"). Textos exatos do contrato:
+   *   metade -> "Já foi metade do mercadinho do mês."
+   *   alto   -> "Ô, irmão, o mercadinho já tá alto, segura aí."
+   *   passou -> "Mercadinho passou da referência." + quanto passou
+   */
+  function avisoMercadinho(m) {
+    if (!m || !m.nivel || m.nivel === "ok") return null;
+    var titulo, resto, classe = "dica alerta";
+    if (m.nivel === "passou") {
+      titulo = "Mercadinho passou da referência.";
+      resto = " Já foi " + dinheiro(m.mercadinho) + ", " + dinheiro(m.mercadinho - m.referencia) + " acima dos " + dinheiro(m.referencia) + ".";
+    } else if (m.nivel === "alto") {
+      titulo = "Ô, irmão, o mercadinho já tá alto, segura aí.";
+      resto = " " + dinheiro(m.mercadinho) + " de " + dinheiro(m.referencia) + ".";
+    } else {
+      titulo = "Já foi metade do mercadinho do mês.";
+      resto = " " + dinheiro(m.mercadinho) + " de " + dinheiro(m.referencia) + ".";
+      classe = "dica";
+    }
+    return h("div", { class: classe, role: "status" }, h("b", null, titulo), resto);
+  }
+
+  // Card "Orçamento do salário · regra X": fixas e parcelas / livre / investir
+  function cardOrcamento(o, temBase) {
+    var titulo = "Orçamento do salário · regra " + o.regra;
+    if (!temBase) {
+      return secao(titulo, vazio("Sem salário cadastrado, não dá para montar o orçamento. Cadastre o salário em Config > Fontes de renda.",
+        "Cadastrar o salário", function () { ir("cadastros", { tipo: "fonte" }); }));
+    }
+    var p = o.pcts;
+    // texto "sobram R$ X" ou "passou R$ X" de uma faixa
+    function sobraOuPassou(usado, alvo) {
+      return usado > alvo ? "passou " + reaisCurto(usado - alvo) : "sobram " + reaisCurto(alvo - usado);
+    }
+    var fx = o.fixas, lv = o.livre, inv = o.investir;
+    var rodInvestir;
+    if (inv.sobra < 0) rodInvestir = "O salário não cobriu os gastos: faltam " + reaisCurto(-inv.sobra) + " para fechar o mês";
+    else if (inv.sobra >= inv.alvo) rodInvestir = "É o que sobra do salário. Já dá os " + p.investir + "%";
+    else rodInvestir = "É o que sobra do salário. Faltam " + reaisCurto(inv.alvo - inv.sobra) + " para os " + p.investir + "%";
+    var origem = (o.baseOrigem || []).map(function (b) { return b.nome || NI; }).join(" + ");
+    return secao(titulo,
+      h("div", { class: "cartao barras" },
+        faixa("Fixas e parcelas · " + p.fixas + "%", reaisCurto(fx.usado) + " de " + reaisCurto(fx.alvo),
+          fx.alvo > 0 ? fx.usado / fx.alvo * 100 : (fx.usado > 0 ? 100 : 0), classeFaixa(fx.usado, fx.alvo),
+          "Contas fixas " + reaisCurto(fx.contas) + " + parcelas " + reaisCurto(fx.parcelas) + " · " + sobraOuPassou(fx.usado, fx.alvo)),
+        faixa("Livre · " + p.livre + "%", reaisCurto(lv.usado) + " de " + reaisCurto(lv.alvo),
+          lv.alvo > 0 ? lv.usado / lv.alvo * 100 : (lv.usado > 0 ? 100 : 0), classeFaixa(lv.usado, lv.alvo),
+          "Mercado, posto, lazer e o resto · " + sobraOuPassou(lv.usado, lv.alvo)),
+        faixa("Investir · " + p.investir + "%", reaisCurto(inv.sobra) + " de " + reaisCurto(inv.alvo),
+          inv.alvo > 0 ? inv.sobra / inv.alvo * 100 : 0, inv.sobra < 0 ? "estourou" : "meta", rodInvestir)),
+      h("div", { class: "nota" }, "Salário previsto: " + dinheiro(o.base) + (origem ? " (" + origem + ")" : "") + ". A regra e o salário mudam em Config."));
+  }
+
+  // Card "Mercado": compra mensal, mercadinho e a régua 50% / 80% / 100% da referência
+  function cardMercado(m) {
+    var ref = m.referencia;
+    var pct = ref > 0 ? m.mercadinho / ref * 100 : 0;
+    var classe = m.nivel === "passou" ? "estourou" : m.nivel === "alto" ? "quase" : "";
+    var idas = m.idasMercadinho || 0;
+    var barraMarcos = h("div", { class: "trilha marco", role: "presentation" },
+      h("div", { class: "preenche" + (classe ? " " + classe : ""), style: "width:" + Math.max(0, Math.min(100, pct)).toFixed(1) + "%" }),
+      h("i", { style: "left:50%" }), h("i", { style: "left:80%" }));
+    var regua = h("div", { class: "regua", "aria-hidden": "true" },
+      h("span", { style: "left:0" }, "R$ 0"),
+      h("span", { style: "left:50%" }, reaisCurto(Math.round(ref * 0.5), true)),
+      h("span", { style: "left:80%" }, reaisCurto(Math.round(ref * 0.8), true)),
+      h("span", { style: "left:100%" }, reaisCurto(ref, true)));
+    return secao("Mercado", h("div", { class: "cartao" },
+      linha("Compra mensal", { det: "a compra grande do mês", dir: dinheiro(m.compraMensal) }),
+      linha("Mercadinho", { det: idas + (idas === 1 ? " ida" : " idas") + " · referência " + reaisCurto(ref), dir: dinheiro(m.mercadinho), corDir: m.nivel === "passou" ? "var(--alerta)" : null }),
+      h("div", { style: "margin-top:10px", role: "img", "aria-label": "Mercadinho em " + pctBR(pct) + " da referência" }, barraMarcos, regua)));
+  }
+
+  // Card "Extra · fora do orçamento": o que entrou de RAS, PROEIS, segurança...
+  function cardExtra(ex) {
+    var itens = ex.itens || [];
+    var linhas = itens.map(function (it) {
+      var recebido = it.recebido !== null && it.recebido !== undefined;
+      return linha(it.nome || NI, {
+        det: recebido ? "recebido " + diaMes(it.data) : "a receber",
+        dir: dinheiro(recebido ? it.recebido : it.previsto), corDir: recebido ? null : "var(--ink-3)"
+      });
+    });
+    if (!linhas.length) linhas.push(h("div", { class: "nota", style: "padding-bottom:9px" }, "Nada de extra em " + nomeMes(ui.mes) + ". Lance o que entrar em Mês › Receita avulsa, escolhendo a fonte."));
+    linhas.push(linha("Entrou de extra", {
+      det: (ex.aReceber > 0 ? "a receber ainda: " + dinheiro(ex.aReceber) + ". " : "") + "Não paga conta. Vai para dívida ou reserva.",
+      dir: dinheiro(ex.recebido), classe: "total"
+    }));
+    var card = h("div", { class: "cartao extra" }, linhas);
+    // o valor total fica na cor da caixa extra
+    var tot = card.querySelector(".linha.total .dir");
+    if (tot) tot.classList.add("v");
+    return secao("Extra · fora do orçamento", card);
+  }
+
+  // Card "Metas": reservas com meta, com quantos salários a meta vale
+  function cardMetas(metas, base) {
+    var algumSemGuardado = false;
+    var faixas = metas.map(function (mt) {
+      var semGuardado = mt.guardado === null || mt.guardado === undefined;
+      if (semGuardado) algumSemGuardado = true;
+      var partes = [];
+      if (base) {
+        var salarios = Math.round(mt.meta / base * 10) / 10;
+        partes.push(String(salarios).replace(".", ",") + (salarios === 1 ? " salário" : " salários"));
+      }
+      partes.push(semGuardado ? "guardado " + NI : pctBR(mt.pct || 0) + " guardado");
+      return faixa(mt.nome || NI, (semGuardado ? NI : reaisCurto(mt.guardado)) + " de " + reaisCurto(mt.meta),
+        semGuardado ? 0 : mt.pct, "meta", partes.join(" · "));
+    });
+    return secao("Metas", h("div", { class: "cartao barras" }, faixas),
+      algumSemGuardado ? h("div", { class: "nota" }, "Atualize o valor guardado em Config › Reservas e metas.") : null);
+  }
 
   /* ---------------- 5.3 Mês em detalhe ---------------- */
 
@@ -1579,7 +1753,7 @@
     conta_fixa: { titulo: "Contas fixas", um: "conta fixa", vazio: "Nenhuma conta fixa (luz, internet, escola…).",
       det: function (c) { return dinheiro(c.valor_previsto) + " · todo dia " + (c.dia || NI) + " · desde " + (c.inicio ? mesExtenso(c.inicio) : NI) + (c.fim ? " até " + mesExtenso(c.fim) : ""); } },
     fonte: { titulo: "Fontes de renda", um: "fonte de renda", vazio: "Nenhuma fonte de renda (salário, extras…).",
-      det: function (c) { return ({ mensal: "mensal", quinzenal: "quinzenal", avulso: "avulso" }[c.periodicidade] || NI) + (c.dias && c.dias.length ? " · dia " + c.dias.join(" e ") : "") + " · " + dinheiro(c.valor_previsto) + (c.de ? " · " + c.de : ""); } },
+      det: function (c) { return ({ mensal: "mensal", quinzenal: "quinzenal", avulso: "avulso" }[c.periodicidade] || NI) + (c.dias && c.dias.length ? " · dia " + c.dias.join(" e ") : "") + " · " + dinheiro(c.valor_previsto) + (c.de ? " · " + c.de : "") + (c.extra === true ? " · extra" : ""); } },
     reserva: { titulo: "Reservas e metas", um: "reserva", vazio: "Nenhuma reserva (dinheiro guardado para algo).",
       det: function (c) { return "guardado " + dinheiro(c.valor_guardado) + (c.meta ? " · meta " + dinheiro(c.meta) : ""); } }
   };
@@ -1596,6 +1770,7 @@
     var est = (Dados.estado && Dados.estado()) || {};
     if (est.aviso) conteudo.push(h("div", { class: "erro", role: "alert" }, est.aviso));
     if (est.erro && !semNuvem) conteudo.push(h("div", { class: "erro", role: "alert" }, "Sincronização: " + est.erro));
+    conteudo.push(secaoOrcamento(regs));
     conteudo.push(secao("Este celular", h("div", { class: "cartao" },
       linha("Quem está usando", { dir: ap.eu || NI, num: false, aoTocar: function () { ir("quem", {}); }, rotulo: "Trocar quem está usando" }),
       linha("Código do casal", { det: "quem tem o código vê os lançamentos", dir: "••••-••••", aoTocar: function () { ir("codigo"); }, rotulo: "Ver código do casal" }),
@@ -1633,6 +1808,80 @@
     return { titulo: "Configuração", conteudo: conteudo };
   };
 
+  /*
+   * Seção "Orçamento" da Config (CONTRATO seção 8.1 e 8.3).
+   * Grava no registro fixo "ajuste:casal" na hora em que muda (igual aos chips do app):
+   *   regra_orcamento        "70/20/10" | "60/30/10"
+   *   fonte_salario_id       id da fonte base, ou null = todas as fontes que não são extra
+   *   referencia_mercadinho  centavos (padrão 50000 = R$ 500,00)
+   * Sempre parte do registro inteiro que já existe (nomes do casal etc.), então nenhum campo se perde.
+   */
+  var REFERENCIA_PADRAO = 50000;
+  function gravarAjuste(mudancas, mensagem) {
+    var atualAj = Dados.obter("ajuste:casal");
+    // Sem o registro (entrou pelo código e os dados ainda não chegaram da nuvem): não cria um
+    // novo, para não passar por cima dos nomes do casal quando a nuvem responder.
+    if (!atualAj) { avisar("Os dados do casal ainda não chegaram da nuvem. Tente de novo daqui a pouco."); return null; }
+    var novo = Object.assign({}, atualAj, mudancas, { tipo: "ajuste", id: "ajuste:casal" });
+    return gravar(function () { return Dados.salvar(novo, { motivo: "alterou orçamento" }); }, mensagem || "Orçamento salvo.");
+  }
+
+  function secaoOrcamento(regs) {
+    var aj = Dados.obter("ajuste:casal") || {};
+    var semAjuste = !Dados.obter("ajuste:casal");
+
+    // Regra: dois botões lado a lado
+    var regraAtual = aj.regra_orcamento === "60/30/10" ? "60/30/10" : "70/20/10";
+    var regra = chips("Regra do salário", [
+      { valor: "70/20/10", rotulo: "70 / 20 / 10" },
+      { valor: "60/30/10", rotulo: "60 / 30 / 10" }
+    ], regraAtual, function (v) {
+      // não gravou: redesenha para o botão aceso voltar a mostrar o que está salvo
+      if (gravarAjuste({ regra_orcamento: v }, "Regra " + v + " salva.") === null) desenhar(false);
+    });
+    regra.el.className = "seg";
+    var idRegra = "c" + (++contadorId);
+    var campoRegra = h("div", { class: "campo" },
+      h("span", { id: idRegra, style: "font-size:12px; color:var(--ink-2); font-weight:500" }, "Regra do salário"),
+      regra.el, h("div", { class: "ajuda" }, "Fixas e parcelas / livre / investir"));
+    regra.el.setAttribute("aria-labelledby", idRegra);
+
+    // Salário base: fontes que não são extra (avulsa não tem previsto, então não serve de base)
+    var fontesBase = doTipo("fonte", regs).filter(function (fo) {
+      return fo.extra !== true && fo.periodicidade !== "avulso" && (fo.ativo !== false || fo.id === aj.fonte_salario_id);
+    }).sort(porNome);
+    var opcoes = [{ valor: "", rotulo: "Todas as fontes que não são extra" }].concat(fontesBase.map(function (fo) {
+      return { valor: fo.id, rotulo: (fo.nome || NI) + " — " + dinheiro(fo.valor_previsto) + (fo.periodicidade === "quinzenal" ? " por quinzena" : "") + (fo.ativo === false ? " (desativada)" : "") };
+    }));
+    var escolhida = aj.fonte_salario_id && fontesBase.some(function (fo) { return fo.id === aj.fonte_salario_id; }) ? aj.fonte_salario_id : "";
+    var selSalario = selecao(opcoes, escolhida);
+    selSalario.addEventListener("change", function () {
+      if (gravarAjuste({ fonte_salario_id: selSalario.value || null }, "Salário base salvo.") === null) selSalario.value = escolhida;
+    });
+
+    // Referência do mercadinho: grava ao sair do campo (ou Enter no teclado)
+    var refAtual = typeof aj.referencia_mercadinho === "number" && aj.referencia_mercadinho > 0 ? aj.referencia_mercadinho : REFERENCIA_PADRAO;
+    var inpRef = entradaDinheiro(refAtual);
+    inpRef.addEventListener("keydown", function (ev) { if (ev.key === "Enter") inpRef.blur(); });
+    inpRef.addEventListener("change", function () {
+      var v = Regras.centavos(inpRef.value);
+      if (v === null || v <= 0) { avisar("Escreva um valor maior que zero (ex.: 500,00)."); inpRef.value = centavosParaTexto(refAtual); return; }
+      if (v === refAtual) { inpRef.value = centavosParaTexto(v); return; }
+      if (gravarAjuste({ referencia_mercadinho: v }, "Referência do mercadinho salva.") !== null) refAtual = v;
+      else inpRef.value = centavosParaTexto(refAtual);
+    });
+
+    var corpoCartao = [
+      campoRegra,
+      campo("Salário que manda no orçamento", selSalario, fontesBase.length
+        ? "Fontes marcadas como \"extra\" nunca entram nessa conta"
+        : "Nenhuma fonte de salário cadastrada. Cadastre em Fontes de renda, logo abaixo."),
+      campo("Referência do mercadinho por mês", inpRef, "Não bloqueia nada. Avisa na metade, em 80% e quando passar.")
+    ];
+    if (semAjuste) corpoCartao.unshift(h("div", { class: "dica alerta" }, "Os dados do casal ainda não chegaram da nuvem. O orçamento pode ser ajustado assim que chegarem."));
+    return secao("Orçamento", h("div", { class: "cartao", style: "display:flex; flex-direction:column; gap:14px" }, corpoCartao));
+  }
+
   // Nome do arquivo CSV por tipo: gastos-lancamentos-2026-10-05.csv
   var PLURAL_CSV = { lancamento: "lancamentos", conta_fixa: "contas-fixas", fixa_confirmada: "contas-fixas-confirmadas", fonte: "fontes-de-renda",
     receita_confirmada: "receitas-confirmadas", receita_avulsa: "receitas-avulsas", pessoa: "pessoas", emprestimo: "emprestimos",
@@ -1651,6 +1900,54 @@
       avisar("Backup baixado. Guarde em lugar seguro.");
     } catch (e) { console.warn(e); avisar("Não consegui gerar o backup."); }
   }
+  /*
+   * REAPROVEITAR CADASTROS AO IMPORTAR (CONTRATO seção 8.3, última regra)
+   * Categoria, meio ou cartão do arquivo com o MESMO nome de um cadastro ATIVO que já existe
+   * aqui (sem diferenciar maiúsculas, acentos e espaços sobrando) não é importado: ele sai do
+   * arquivo e tudo no arquivo que apontava para ele passa a apontar para o cadastro que já existe:
+   *   categoria_id e meio (lançamentos, contas fixas...) e, no ajuste, os campos categoria_*_id.
+   * Trabalha numa CÓPIA do arquivo (o objeto lido não é mexido).
+   * Devolve {obj: cópia pronta para Dados.importarBackup, reaproveitados: n}.
+   */
+  var TIPOS_REAPROVEITAR = { categoria: 1, meio: 1, cartao: 1 };
+  function nomeComparavel(t) {
+    if (t === null || t === undefined) return "";
+    return String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  }
+  function reaproveitarCadastros(original) {
+    var copia = JSON.parse(JSON.stringify(original));
+    if (!copia || !Array.isArray(copia.registros)) return { obj: copia, reaproveitados: 0 };
+    // cadastros ativos deste celular, por tipo + nome comparável
+    var existentes = {};
+    registros().forEach(function (r) {
+      if (!TIPOS_REAPROVEITAR[r.tipo] || r.ativo === false) return;
+      var chave = r.tipo + "|" + nomeComparavel(r.nome);
+      if (nomeComparavel(r.nome) && !existentes[chave]) existentes[chave] = r.id;
+    });
+    // id do arquivo -> id que já existe aqui
+    var troca = {};
+    copia.registros.forEach(function (r) {
+      if (!r || !TIPOS_REAPROVEITAR[r.tipo] || r.apagado === true || typeof r.id !== "string") return;
+      var alvo = existentes[r.tipo + "|" + nomeComparavel(r.nome)];
+      // mesmo id = é o próprio registro (backup deste casal): a mesclagem normal resolve
+      if (alvo && alvo !== r.id) troca[r.id] = alvo;
+    });
+    var n = Object.keys(troca).length;
+    if (!n) return { obj: copia, reaproveitados: 0 };
+    copia.registros = copia.registros.filter(function (r) { return !(r && TIPOS_REAPROVEITAR[r.tipo] && troca[r.id]); });
+    copia.registros.forEach(function (r) {
+      if (!r || typeof r !== "object" || r.tipo === "historico") return;
+      if (r.categoria_id && troca[r.categoria_id]) r.categoria_id = troca[r.categoria_id];
+      if (r.meio && troca[r.meio]) r.meio = troca[r.meio];
+      if (r.tipo === "ajuste") {
+        Object.keys(r).forEach(function (k) {
+          if (/^categoria_.+_id$/.test(k) && r[k] && troca[r[k]]) r[k] = troca[r[k]];
+        });
+      }
+    });
+    return { obj: copia, reaproveitados: n };
+  }
+
   function importarArquivo(input) {
     var f = input.files && input.files[0];
     input.value = "";
@@ -1661,11 +1958,14 @@
       try { obj = JSON.parse(leitor.result); } catch (e) { avisar("Esse arquivo não é um backup válido."); return; }
       var n = obj && Array.isArray(obj.registros) ? obj.registros.length : 0;
       if (!n) { avisar("Esse arquivo não tem registros do Gastos do Casal."); return; }
-      confirmar("Importar backup com " + n + " registros?", "Importar", "Nada do que já está no app será apagado: o mais recente de cada registro vence.").then(function (ok) {
+      var prep = reaproveitarCadastros(obj);
+      var sub = "Nada do que já está no app será apagado: o mais recente de cada registro vence.";
+      if (prep.reaproveitados) sub += " " + prep.reaproveitados + (prep.reaproveitados === 1 ? " cadastro do arquivo já existe aqui com o mesmo nome e será reaproveitado." : " cadastros do arquivo já existem aqui com o mesmo nome e serão reaproveitados.");
+      confirmar("Importar backup com " + n + " registros?", "Importar", sub).then(function (ok) {
         if (!ok) return;
         try {
-          var r = Dados.importarBackup(obj) || {};
-          avisar("Importado: " + (r.novos || 0) + " novos, " + (r.atualizados || 0) + " atualizados, " + (r.ignorados || 0) + " ignorados.");
+          var r = Dados.importarBackup(prep.obj) || {};
+          avisar("Importado: " + (r.novos || 0) + " novos, " + (r.atualizados || 0) + " atualizados, " + (r.ignorados || 0) + " ignorados, " + prep.reaproveitados + (prep.reaproveitados === 1 ? " cadastro reaproveitado." : " cadastros reaproveitados."));
         } catch (e) { console.warn(e); avisar("Não consegui importar: " + (e && e.message ? e.message : "erro")); }
       });
     };
@@ -1845,6 +2145,8 @@
       var nomes = nomesCasal();
       var deSel = selecao([{ valor: "", rotulo: "Do casal / " + NI }].concat(nomes.map(function (n) { return { valor: n, rotulo: n }; })), e.de || "");
       var iniF = entradaMes(e.inicio || mesAtual());
+      // renda extra (RAS, PROEIS, segurança): fica fora do orçamento do salário (CONTRATO 8.1)
+      var extra = marca("É extra (fora do orçamento)", e.extra === true);
       var ajustarDias = function (v) {
         c1.hidden = v === "avulso"; c2.hidden = v !== "quinzenal";
         c1.querySelector("label").textContent = v === "quinzenal" ? "Dia da 1ª quinzena" : "Dia em que cai";
@@ -1853,7 +2155,9 @@
       var perChips = chips("Periodicidade", [{ valor: "mensal", rotulo: "Mensal" }, { valor: "quinzenal", rotulo: "Quinzenal" }, { valor: "avulso", rotulo: "Avulso" }], per, ajustarDias);
       campos.push(secao("De quanto em quanto tempo", perChips.el), h("div", { class: "par" }, c1, c2),
         campo(per === "quinzenal" ? "Valor previsto (cada quinzena)" : "Valor previsto (cada vez)", vpf),
-        campo("De quem é", deSel), campo("Começa em", iniF), ativo.el,
+        campo("De quem é", deSel), campo("Começa em", iniF),
+        extra.el, h("div", { class: "nota" }, "Marque em RAS, PROEIS e Segurança. Fica só no salário a conta do mês."),
+        ativo.el,
         h("div", { class: "nota" }, "Desmarcar \"Ativo\" encerra a fonte em " + mesExtenso(Regras.somaMes(mesAtual(), -1)) + ": os meses passados não mudam e ela some daqui para frente."),
         h("div", { class: "nota" }, "Avulso: não tem dia certo. Lance cada valor em Mês › Receita avulsa."));
       setTimeout(function () { ajustarDias(per); }, 0);
@@ -1864,7 +2168,7 @@
         if (pv === "mensal") { var a = lerDia(d1); if (a === null || isNaN(a)) return "Escreva o dia em que o dinheiro cai (1 a 31)."; lista = [a]; }
         if (pv === "quinzenal") { var x = lerDia(d1), y = lerDia(d2); if (x === null || y === null || isNaN(x) || isNaN(y)) return "Escreva os dois dias das quinzenas (ex.: 15 e 30)."; lista = [x, y].sort(function (m, n) { return m - n; }); }
         if (pv !== "avulso" && (v === null || v < 0)) return "Escreva o valor previsto.";
-        var dadosF = { periodicidade: pv, dias: lista, valor_previsto: v, de: deSel.value || null, inicio: iniF.value || mesAtual(), ativo: ativo.entrada.checked };
+        var dadosF = { periodicidade: pv, dias: lista, valor_previsto: v, de: deSel.value || null, inicio: iniF.value || mesAtual(), ativo: ativo.entrada.checked, extra: extra.entrada.checked };
         // desativar grava fim = mês anterior (igual à conta fixa); reativar limpa o fim
         if (ex && e.ativo !== false && !dadosF.ativo) dadosF.fim = fimAoDesativar(e);
         else if (dadosF.ativo) dadosF.fim = null;
@@ -1925,7 +2229,7 @@
   var CAMPOS_INTERNOS = { id: 1, tipo: 1, criado_em: 1, alterado_em: 1, versao_formato: 1, lancado_por: 1 };
   function formatarCampo(k, v) {
     if (v === null || v === undefined || v === "") return NI;
-    if (typeof v === "number" && /valor|meta|guardado|previsto|recebido|real/.test(k)) return Regras.dinheiro(v);
+    if (typeof v === "number" && /valor|meta|guardado|previsto|recebido|real|referencia/.test(k)) return Regras.dinheiro(v);
     if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return Regras.dataBR(v);
     if (typeof v === "boolean") return v ? "sim" : "não";
     if (Array.isArray(v)) return v.join(", ");

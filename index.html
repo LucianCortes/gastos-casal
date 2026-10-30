@@ -287,6 +287,28 @@
   .boasvindas h2{margin:0; font-size:22px; letter-spacing:-.02em}
   .boasvindas p{margin:0; color:var(--ink-2); font-size:14px}
 
+  /* ===== Orçamento do salário (CONTRATO seção 8, protótipo de 30/10/2026) ===== */
+  /* faixa = uma linha do orçamento: título, valor, barra e rodapé */
+  .faixa .cab{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; margin-bottom:5px}
+  .faixa .cab b{font-weight:500; overflow-wrap:anywhere}
+  .faixa .cab span{color:var(--ink-2); font-size:12.5px; white-space:nowrap}
+  .faixa .rodape{font-size:11.5px; color:var(--ink-3); margin-top:4px}
+  /* cor da barra: perto do alvo (80%), passou do alvo, e meta (investir/reservas) */
+  .preenche.estourou{background:var(--alerta)}
+  .preenche.quase{background:var(--terceiro)}
+  .preenche.meta{background:var(--esposa)}
+  /* marcos (50% e 80%) sobre a barra do mercadinho e a régua com os valores embaixo */
+  .marco{position:relative}
+  .marco i{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink-3); opacity:.5}
+  .regua{position:relative; height:14px; font-size:10.5px; color:var(--ink-3); margin-top:4px}
+  .regua span{position:absolute; transform:translateX(-50%); white-space:nowrap}
+  .regua span:first-child{transform:none} .regua span:last-child{transform:translateX(-100%)}
+  /* caixa da renda extra (fora do orçamento) */
+  .extra{border-left:3px solid var(--esposa)}
+  .extra .v{color:var(--esposa)}
+  /* dois botões lado a lado (regra 70/20/10 · 60/30/10) */
+  .seg{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+
   *:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
 </style>
