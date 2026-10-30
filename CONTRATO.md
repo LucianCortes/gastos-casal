@@ -311,3 +311,75 @@ anteriores; juros sobre empréstimo a parentes. Dado de demonstração nunca ent
 - `estado()` ganhou `aviso` e `nuvemConfigurada`. Sem nuvem, a tela mostra "só neste celular".
 - Próxima parcela de parente = a seguinte às que ele já pagou (`proximaAPagar`), não a primeira pelas datas.
 - Parcelado no formulário: o valor grande é o TOTAL; o valor da parcela é calculado (editável).
+
+---
+
+## 8. Orçamento do salário (incluído no escopo por Lucian em 30/10/2026)
+
+Registro do Guardião do Escopo:
+
+| Data | Item | Entrou/Saiu | Motivo | Autorizado por |
+|------|------|-------------|--------|----------------|
+| 30/10/2026 | Orçamento 70/20/10 (depois 60/30/10) sobre o salário | Entrou | plano para sair do aperto: o orçamento precisa caber só no salário | Lucian |
+| 30/10/2026 | Renda extra fora do orçamento (RAS, PROEIS, segurança) | Entrou | extra pode acabar a qualquer momento; não paga conta | Lucian |
+| 30/10/2026 | Metas: reserva de emergência (6 salários) e viver de renda (120 salários) | Entrou | objetivos de longo prazo | Lucian |
+| 30/10/2026 | Categorias "Compra mensal" e "Mercadinho" + referência com avisos | Entrou | idas avulsas ao mercado custam quase o mesmo que a compra do mês | Lucian |
+| 30/10/2026 | Arquivo com os dados reais para importar | Entrou | evitar digitar tudo; o arquivo NUNCA vai para o repositório (é público) | Lucian |
+
+Protótipo aprovado: `https://claude.ai/artifact/919xguJyN89HWAtjjTzrw2` (30/10/2026).
+
+### 8.1 Campos novos (nenhum tipo novo, nenhuma mudança no banco)
+
+- `fonte.extra` (bool, ausente = false). `true` = renda extra: aparece na caixa "Extra · fora do orçamento"
+  e NUNCA entra na base do orçamento.
+- No registro fixo `ajuste:casal`, campos opcionais (ausente = valor padrão):
+  - `regra_orcamento`: `"70/20/10"` (padrão) ou `"60/30/10"`
+  - `fonte_salario_id`: id da fonte que é a base do orçamento. Ausente ou fonte inexistente = soma de todas as
+    fontes NÃO extra que valem no mês.
+  - `referencia_mercadinho`: centavos (padrão `50000` = R$ 500,00)
+  - `categoria_compra_mensal_id`, `categoria_mercadinho_id`: ausentes = procura categoria ativa pelo nome
+    "Compra mensal" / "Mercadinho" (sem diferenciar maiúsculas e acentos).
+- `CONFIG.categoriasIniciais` passa a ter "Compra mensal" e "Mercadinho" no lugar de "Mercado"
+  (só vale para casal criado daqui em diante).
+
+### 8.2 Regras (regras.js)
+
+**R9. Orçamento do mês.** `Regras.resumoOrcamento(registros, mes, hoje)` devolve:
+```
+{ regra:"70/20/10", pcts:{fixas:70, livre:20, investir:10},
+  base,                // centavos: previsto do salário no mês (soma dos valor_previsto das ocorrências da
+                       // fonte_salario_id, ou de todas as fontes não extra). Sem fonte = null ("NÃO INFORMADO")
+  baseOrigem:[{fonte_id, nome}],
+  fixas:{usado, alvo, contas, parcelas},   // usado = contas fixas do mês (R3) + parcelas casal com competência no mês
+  livre:{usado, alvo},                     // lançamentos casal ÚNICOS com data_compra no mês
+  investir:{sobra, alvo},                  // sobra = base − fixas.usado − livre.usado (pode ser negativa)
+  sobraSalario,                            // = investir.sobra
+  mercado:{compraMensal, mercadinho, idasMercadinho, referencia,
+           nivel:"ok"|"metade"|"alto"|"passou"},  // metade >= 50%, alto >= 80%, passou >= 100% da referência
+  extras:{recebido, aReceber, itens:[{fonte_id, nome, recebido|null, previsto|null, data|null}]},
+  metas:[{reserva_id, nome, guardado|null, meta, pct}] }  // reservas com meta, em ordem de meta crescente
+```
+- alvo = round(base × pct / 100). Com base null, todos os alvos são null.
+- fixas.usado + livre.usado = gastou do `resumoMes` (mesma regra, só separada). Compra de terceiro nunca entra.
+- Mercado: soma dos lançamentos casal (únicos com data no mês + parcelas com competência no mês) da categoria.
+  `idasMercadinho` = quantos lançamentos únicos de Mercadinho no mês.
+- Extras: ocorrências das fontes `extra:true` no mês (confirmadas = recebido; não confirmadas com previsto = a receber)
+  + `receita_avulsa` do mês ligada a fonte extra (recebido).
+- `resumoMes` NÃO muda (Entrou continua somando tudo que entrou, inclusive extra).
+
+### 8.3 Telas (app.js / index.html), seguindo o protótipo
+
+- Início: o herói vira "Sobra do salário no mês" (= sobraSalario; vermelho se negativa; sub "Salário R$ X − gastos R$ Y").
+  Os tiles Entrou/Gastou continuam. Abaixo do botão Lançar: aviso do mercadinho (só quando nível ≠ ok),
+  card "Orçamento do salário · regra X", card "Mercado", card "Extra · fora do orçamento" (só se houver fonte extra),
+  card "Metas" (só se houver reserva com meta). Sem base: o card do orçamento explica "Cadastre o salário em
+  Config > Fontes de renda".
+- Textos do aviso: metade → "Já foi metade do mercadinho do mês."; alto → "Ô, irmão, o mercadinho já tá alto,
+  segura aí."; passou → "Mercadinho passou da referência." + quanto passou.
+- Config: seção "Orçamento" com a regra (chips 70/20/10 · 60/30/10), o salário base (seleção entre as fontes
+  não extra, com "Todas as fontes que não são extra") e a referência do mercadinho. Grava no `ajuste:casal`
+  preservando os outros campos.
+- Cadastro de fonte: marca "É extra (fora do orçamento)".
+- Importar backup: antes de mesclar, cadastros do arquivo (categoria, meio, cartão) com o MESMO nome de um
+  cadastro ativo já existente (sem diferenciar maiúsculas/acentos) não são importados; as referências a eles no
+  arquivo passam a apontar para o cadastro existente. A mensagem final diz quantos foram reaproveitados.

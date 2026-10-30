@@ -14,7 +14,7 @@
  * >>> A CADA PUBLICAÇÃO NOVA, TROQUE A DATA ABAIXO. <<<
  * Sem isso, os celulares podem continuar mostrando a versão antiga.
  */
-var VERSAO = '2026-10-05b';
+var VERSAO = '2026-10-30a';
 var CACHE = 'gastos-casal-' + VERSAO;
 
 var ARQUIVOS = [
