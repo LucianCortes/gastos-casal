@@ -23,6 +23,6 @@ window.CONFIG = {
   // segundos entre cada conferência automática com a nuvem, com a tela aberta
   intervaloSincronizacao: 20,
 
-  categoriasIniciais: ["Mercado", "Combustível", "Casa", "Escola", "Farmácia", "Lazer", "Outros"],
+  categoriasIniciais: ["Compra mensal", "Mercadinho", "Combustível", "Casa", "Escola", "Farmácia", "Lazer", "Outros"],
   meiosIniciais: ["Pix", "Dinheiro", "Débito"]
 };
