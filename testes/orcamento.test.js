@@ -58,7 +58,7 @@ var cenario = [
   { id: "cf-net", tipo: "conta_fixa", nome: "Internet", valor_previsto: 10000, dia: null, categoria_id: null, meio: "pix", inicio: "2026-01", fim: null, ativo: true },
   // compra única do casal
   compra("u1", 12345, "2026-10-03", { categoria_id: "cat-merc" }),
-  // compra parcelada do casal: 1000,00 em 3x no cartão, comprada em setembro -> parcela 2 em outubro
+  // compra parcelada do casal: 1000,00 em 3x no cartão, comprada 19/09, fecha 28 / vence 05 -> parcela 1 vence 05/10 e pesa em outubro (R2 de 31/10/2026)
   compra("p1", 33333, "2026-09-19", { repeticao: "parcelado", parcelas: 3, valor_total: 100000, meio: "cartao1" }),
   // compra de terceiro (nunca entra)
   compra("t1", 50000, "2026-10-04", { de_quem: "terceiro", pessoa_id: "pes1" }),
@@ -71,10 +71,10 @@ teste("fixas.usado + livre.usado == resumoMes().gastou (cenário com fixas, úni
   assert.strictEqual(o.fixas.usado + o.livre.usado, m.gastou);
   // conferência dos números: 155000 (aluguel real) + 20000 (luz) + 10000 (internet dia null)
   assert.strictEqual(o.fixas.contas, 185000);
-  assert.strictEqual(o.fixas.parcelas, 33333); // parcela 2/3 de 100000 (33334 + 33333 + 33333)
-  assert.strictEqual(o.fixas.usado, 218333);
+  assert.strictEqual(o.fixas.parcelas, 33334); // parcela 1/3 de 100000 (33334 + 33333 + 33333)
+  assert.strictEqual(o.fixas.usado, 218334);
   assert.strictEqual(o.livre.usado, 12345);
-  assert.strictEqual(m.gastou, 230678);
+  assert.strictEqual(m.gastou, 230679);
 });
 
 teste("o mesmo vale em outros meses (setembro e novembro)", function () {
@@ -93,7 +93,7 @@ teste("regra padrão 70/20/10: alvos, sobra e sobraSalario", function () {
   assert.strictEqual(o.fixas.alvo, 350000);
   assert.strictEqual(o.livre.alvo, 100000);
   assert.strictEqual(o.investir.alvo, 50000);
-  assert.strictEqual(o.investir.sobra, 500000 - 218333 - 12345);
+  assert.strictEqual(o.investir.sobra, 500000 - 218334 - 12345);
   assert.strictEqual(o.sobraSalario, o.investir.sobra);
 });
 
@@ -324,6 +324,24 @@ teste("mês inválido devolve null; lista vazia funciona", function () {
 teste("registros apagados são ignorados", function () {
   var regs = [SALARIO, PIX, compra("x", 1000, "2026-10-01", { apagado: true })];
   assert.strictEqual(Regras.resumoOrcamento(regs, MES, HOJE).livre.usado, 0);
+});
+
+
+teste("R2 (31/10/2026): parcela de cartão pesa no mês do vencimento da sua fatura; única continua no mês da compra", function () {
+  var regs = [
+    { id: "cart", tipo: "cartao", nome: "C", dia_fechamento: 6, dia_vencimento: 20, ativo: true },
+    { id: "par", tipo: "lancamento", descricao: "par", data_compra: "2026-05-31", valor: 1990, valor_total: 23880, parcelas: 12,
+      repeticao: "parcelado", de_quem: "casal", meio: "cart", criado_em: "2026-05-31T12:00:00Z", alterado_em: "2026-05-31T12:00:00Z" },
+    { id: "uni", tipo: "lancamento", descricao: "uni", data_compra: "2026-10-28", valor: 5000, repeticao: "unico", de_quem: "casal",
+      meio: "cart", criado_em: "2026-10-28T12:00:00Z", alterado_em: "2026-10-28T12:00:00Z" }
+  ];
+  var ps = Regras.parcelasDe(regs[1], regs, "2026-10-30");
+  // compra 31/05 >= fechamento 06 -> fecha 06/06 -> vence 20/06: parcela 1 em junho, parcela 6 em novembro
+  assert.strictEqual(ps[0].competencia, "2026-06");
+  assert.strictEqual(ps.filter(function (p) { return p.competencia === "2026-11"; })[0].k, 6);
+  ps.forEach(function (p) { assert.strictEqual(p.competencia, p.fatura.mes); });
+  // compra única no cartão: pesa em outubro (mês da compra), mesmo vencendo em novembro
+  assert.strictEqual(Regras.parcelasDe(regs[2], regs, "2026-10-30")[0].competencia, "2026-10");
 });
 
 console.log("\n" + passou + " passaram, " + falhou + " falharam");

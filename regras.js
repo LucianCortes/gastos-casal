@@ -445,14 +445,19 @@
     var lista = [];
 
     for (var k = 1; k <= vals.n; k++) {
-      // R2: parcela k pesa no mês da compra + (k-1)
-      var competencia = mesCompra ? somaMes(mesCompra, k - 1) : null;
       // R2: parcela k cai na fatura da compra + (k-1) meses (anda o mês de fechamento)
       var fat = null;
       if (base) {
         var mf = lerMes(somaMes(textoMes(baseFech.ano, baseFech.mes), k - 1));
         fat = faturaPeloMesDeFechamento(info.cartao, mf.ano, mf.mes);
       }
+      // R2 (ajuste de 31/10/2026, pedido do Lucian): compra PARCELADA em cartão com datas
+      // pesa no mês do VENCIMENTO da fatura de cada parcela — o mesmo mês e o mesmo número
+      // de parcela que aparecem na fatura do banco. Compra única continua no mês da compra.
+      // Sem fatura conhecida (cartão sem datas, Pix, dinheiro): mês da compra + (k-1), como antes.
+      var competencia;
+      if (vals.parcelado && fat) competencia = fat.mes;
+      else competencia = mesCompra ? somaMes(mesCompra, k - 1) : null;
       // R2: vencida = vencimento da fatura ≤ hoje. Sem fatura: vencida quando o mês de
       // competência já começou (dia 1 do mês ≤ hoje).
       var vencida = null;

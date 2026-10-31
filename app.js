@@ -1034,7 +1034,7 @@
         return h("button", { type: "button", class: "cartao", onclick: function () { ir("cadastro", { tipo: "reserva", id: rv.id }); } },
           linha(rv.nome || NI, { det: temMeta ? "meta " + dinheiro(rv.meta) : "sem meta", dir: dinheiro(rv.valor_guardado) }),
           temMeta ? trilha((rv.valor_guardado || 0) / rv.meta * 100, "", "margin-top:10px") : null,
-          temMeta ? h("div", { class: "nota", style: "margin-top:6px" }, (rv.valor_guardado || 0) >= rv.meta ? "Meta alcançada" : "Faltam " + dinheiro(rv.meta - (rv.valor_guardado || 0))) : null);
+          temMeta ? h("div", { class: "nota", style: "margin-top:6px" }, rv.valor_guardado == null ? "Faltam: " + NI + " (informe quanto já tem guardado)" : rv.valor_guardado >= rv.meta ? "Meta alcançada" : "Faltam " + dinheiro(rv.meta - rv.valor_guardado)) : null);
       })));
     }
 

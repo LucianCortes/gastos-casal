@@ -383,3 +383,13 @@ Protótipo aprovado: `https://claude.ai/artifact/919xguJyN89HWAtjjTzrw2` (30/10/
 - Importar backup: antes de mesclar, cadastros do arquivo (categoria, meio, cartão) com o MESMO nome de um
   cadastro ativo já existente (sem diferenciar maiúsculas/acentos) não são importados; as referências a eles no
   arquivo passam a apontar para o cadastro existente. A mensagem final diz quantos foram reaproveitados.
+
+---
+
+## 9. Ajustes após a auditoria de UX (31/10/2026)
+
+| Data | Item | Motivo | Autorizado por |
+|------|------|--------|----------------|
+| 31/10/2026 | **R2 mudou:** compra PARCELADA em cartão com datas pesa no mês do VENCIMENTO da fatura de cada parcela (`competencia = fatura.mes`). Compra única continua no mês da compra. Sem fatura conhecida (cartão sem datas, Pix, dinheiro): mês da compra + (k-1), como antes | a tela mostrava "parcela 7/12" em novembro enquanto a fatura do banco dizia 5/12, e três totais diferentes para as parcelas de dezembro | Lucian |
+| 31/10/2026 | Cor `--ink-3` escurecida (claro #617168, escuro #8f9e92) e novas `--accent-texto`, `--esposa-texto`, `--alerta-texto` para texto sobre fundo suave | contraste abaixo de 4,5:1 (WCAG 1.4.3) em ~150 textos pequenos | Lucian |
+| 31/10/2026 | Reserva sem valor guardado mostra "Faltam: NÃO INFORMADO" em vez de supor zero | contradição na tela | Lucian |

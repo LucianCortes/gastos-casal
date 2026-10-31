@@ -20,7 +20,9 @@
   :root{
     color-scheme:light;
     --ground:#eef1ed; --surface:#fcfdfb; --surface-2:#f4f6f2;
-    --ink:#161d19; --ink-2:#4b5a52; --ink-3:#74857b;
+    --ink:#161d19; --ink-2:#4b5a52; --ink-3:#617168;
+    /* cores de texto sobre fundos suaves (auditoria 31/10/2026: contraste mínimo 4,5:1) */
+    --accent-texto:#0f7660; --esposa-texto:#8A4FC4; --alerta-texto:#AE3227;
     --line:#dde3dc; --line-2:#c9d2c8; --trilha:#e6eae4;
     --accent:#12836A; --accent-soft:rgba(18,131,106,.10);
     --esposa:#8A4FC4; --esposa-soft:rgba(138,79,196,.10);
@@ -34,7 +36,8 @@
     :root:not([data-theme="light"]){
       color-scheme:dark;
       --ground:#10140f; --surface:#1a201b; --surface-2:#222a23;
-      --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#7d8c80;
+      --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#8f9e92;
+      --accent-texto:#4cb896; --esposa-texto:#c4a3ee; --alerta-texto:#f08a7e;
       --line:#2c352d; --line-2:#3b463c; --trilha:#2c352d;
       --accent:#2E9E80; --accent-soft:rgba(46,158,128,.16);
       --esposa:#A97BE0; --esposa-soft:rgba(169,123,224,.16);
@@ -47,7 +50,8 @@
   :root[data-theme="dark"]{
     color-scheme:dark;
     --ground:#10140f; --surface:#1a201b; --surface-2:#222a23;
-    --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#7d8c80;
+    --ink:#e9efe9; --ink-2:#a7b5aa; --ink-3:#8f9e92;
+      --accent-texto:#4cb896; --esposa-texto:#c4a3ee; --alerta-texto:#f08a7e;
     --line:#2c352d; --line-2:#3b463c; --trilha:#2c352d;
     --accent:#2E9E80; --accent-soft:rgba(46,158,128,.16);
     --esposa:#A97BE0; --esposa-soft:rgba(169,123,224,.16);
@@ -92,9 +96,9 @@
   .topo .dir{display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex:none}
   .quem{
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
-    background:var(--accent-soft); color:var(--accent); padding:5px 10px; border-radius:999px;
+    background:var(--accent-soft); color:var(--accent-texto); padding:5px 10px; border-radius:999px;
   }
-  .quem.ela{background:var(--esposa-soft); color:var(--esposa)}
+  .quem.ela{background:var(--esposa-soft); color:var(--esposa-texto)}
   .quem .ponto{width:7px; height:7px; border-radius:50%; background:currentColor}
   .sinc{font-size:10.5px; color:var(--ink-3); display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
   .sinc i{width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block}
@@ -160,10 +164,10 @@
   .legenda i{width:9px; height:9px; border-radius:3px; display:inline-block; margin-right:5px}
 
   .selo{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:3px 8px; border-radius:999px; white-space:nowrap; vertical-align:middle}
-  .selo.casal{background:var(--accent-soft); color:var(--accent)}
+  .selo.casal{background:var(--accent-soft); color:var(--accent-texto)}
   .selo.terc{background:var(--terceiro-soft); color:var(--terceiro)}
   .selo.aberto{background:var(--alerta-soft); color:var(--alerta)}
-  .selo.pago{background:var(--accent-soft); color:var(--accent)}
+  .selo.pago{background:var(--accent-soft); color:var(--accent-texto)}
   .selo.vago{background:var(--surface-2); color:var(--ink-3); border:1px solid var(--line)}
 
   .chips{display:flex; flex-wrap:wrap; gap:7px}
@@ -199,7 +203,7 @@
   .marca input{width:22px; height:22px; accent-color:var(--accent)}
   .dica{font-size:12px; color:var(--ink-2); background:var(--accent-soft); border-radius:11px; padding:10px 12px; line-height:1.4}
   .dica b{color:var(--accent)}
-  .dica.alerta{background:var(--alerta-soft)} .dica.alerta b{color:var(--alerta)}
+  .dica.alerta{background:var(--alerta-soft)} .dica.alerta b{color:var(--alerta-texto)}
   .erro{font-size:13px; color:var(--alerta); background:var(--alerta-soft); border-radius:11px; padding:10px 12px; font-weight:500}
 
   .botao{
